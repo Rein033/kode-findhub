@@ -94,15 +94,42 @@ def dot_send(port: str, line: str, timeout: float = 5.0) -> str:
         return "\n".join(got)
 
 
-def provision_line(eik: bytes, pair_date: int, utp: bool) -> str:
+def watch_send(port: str, line: str, timeout: float = 8.0) -> str:
+    """The watch resets when its port opens: wait for it, send, return the 'findhub' answer."""
+    import serial
+
+    with serial.Serial() as s:
+        s.port, s.baudrate, s.timeout, s.dtr, s.rts = port, 115200, 0.2, False, False
+        s.open()
+        time.sleep(6)
+        s.reset_input_buffer()
+        s.write((line + "\n").encode())
+        end = time.time() + timeout
+        while time.time() < end:
+            raw = s.readline().decode(errors="replace").strip()
+            if raw.startswith("findhub "):
+                return raw
+        return "(no answer)"
+
+
+def provision_line(eik: bytes, pair_date: int, utp: bool, watch: bool = False) -> str:
+    if watch:   # Kode-watch OS: "findhub eik <hex> <pair_date> [noutp]"
+        return f"findhub eik {eik.hex()} {pair_date}" + ("" if utp else " noutp")
     return f'findhub_set eik="{eik.hex()}" pair_date={pair_date} utp={"on" if utp else "off"}'
 
 
-def provision(port, eik, pair_date, utp):
-    line = provision_line(eik, pair_date, utp)
+def provision(port, eik, pair_date, utp, watch=False):
+    line = provision_line(eik, pair_date, utp, watch)
     if not port:
         print("Type this on the Dot's USB console (it is a secret: not over BLE):")
         print("  " + line)
+        return
+    if watch:
+        ans = watch_send(port, line)
+        print(ans)
+        if "findhub ok" not in ans:
+            sys.exit("[kodefind] the watch did not accept the key")
+        print(watch_send(port, "findhub info"))
         return
     ans = dot_send(port, line)
     print(ans)
@@ -239,14 +266,14 @@ def register(args):
     p = save(args.name, eik, pair_date)   # before the upload: never lose a key Google has
     spot_request("CreateBleDevice", req.SerializeToString())
     print(f"[kodefind] registered '{args.name}'; key kept in {p}")
-    provision(args.port, eik, pair_date, not args.no_utp)
+    provision(args.port, eik, pair_date, not args.no_utp, args.watch)
 
 
 def cmd_provision(args):
     d = next((x for x in load_all() if x["name"] == args.name), None)
     if d is None:
         sys.exit(f"[kodefind] no saved tracker '{args.name}' in {STORE}")
-    provision(args.port, d["eik"], d["pair_date"], not args.no_utp)
+    provision(args.port, d["eik"], d["pair_date"], not args.no_utp, args.watch)
 
 
 def cmd_static(args):
@@ -277,10 +304,12 @@ def main():
     r.add_argument("--image", default="https://raw.githubusercontent.com/kodediy/KodeOS/main/.github/img/kode-dot.png")
     r.add_argument("--no-utp", action="store_true", help="frame 0x40 instead of 0x41")
     r.add_argument("--force", action="store_true")
+    r.add_argument("--watch", action="store_true", help="the target is a Kode-watch, not a Dot")
     p = sub.add_parser("provision")
     p.add_argument("--name", default="Kode Dot")
     p.add_argument("--port")
     p.add_argument("--no-utp", action="store_true")
+    p.add_argument("--watch", action="store_true", help="the target is a Kode-watch, not a Dot")
     s = sub.add_parser("static")
     s.add_argument("--key", required=True)
     s.add_argument("--port")
