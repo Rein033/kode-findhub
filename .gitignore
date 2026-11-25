@@ -1,0 +1,3 @@
+tests/host/test_kfind
+__pycache__/
+*.pyc

@@ -1,0 +1,208 @@
+diff --git a/components/kaos/CMakeLists.txt b/components/kaos/CMakeLists.txt
+index 494095b..2b1bf1f 100644
+--- a/components/kaos/CMakeLists.txt
++++ b/components/kaos/CMakeLists.txt
+@@ -166,6 +166,10 @@ if(CONFIG_KODEOS_RADIO)
+     endif()
+     if(CONFIG_KODEOS_CONSOLE)
+         list(APPEND srcs "radio/src/radio_verbs.c")
++        if(CONFIG_KODEOS_FINDHUB)
++            # The Find Hub beacon's findhub_* (kode-findhub).
++            list(APPEND srcs "radio/src/findhub_verbs.c")
++        endif()
+     endif()
+     if(CONFIG_KODEOS_WIFI)
+         # The remembered networks live in the C5's vault (kode_wire.h);
+diff --git a/components/kaos/Kconfig b/components/kaos/Kconfig
+index 718640c..5a6a792 100644
+--- a/components/kaos/Kconfig
++++ b/components/kaos/Kconfig
+@@ -226,6 +226,20 @@ menu "kodeOS active objects"
+ 
+                 On in kodeOS, off in an app.
+ 
++        config KODEOS_FINDHUB
++            bool "Find Hub beacon (Google's Find Hub network)"
++            depends on KODEOS_BLE
++            default y if KODEOS_BOOT_ROLE_OS
++            help
++                Lets the board send a Find Hub Network advert between the
++                console's own, so Android phones nearby report where it is to
++                its owner's Google account, end-to-end encrypted. Nothing is
++                sent until the owner sets a key with `findhub_set` (see
++                kode-findhub/README.md). Costs about 30 ms of radio every
++                1.7-1.95 s while the BLE host is up.
++
++                On in kodeOS, off in an app.
++
+         config KODEOS_BLE_DEFAULT_ON
+             bool "BLE on when the store has never been written"
+             depends on KODEOS_BLE
+diff --git a/components/kaos/core/src/kverbs.h b/components/kaos/core/src/kverbs.h
+index e4facca..8577012 100644
+--- a/components/kaos/core/src/kverbs.h
++++ b/components/kaos/core/src/kverbs.h
+@@ -18,7 +18,7 @@
+ extern "C" {
+ #endif
+ 
+-#define KVERBS_TABLES_MAX  19U  /**< Owner tables the registry holds: one per owner with verbs (fifteen) and four for an app. */
++#define KVERBS_TABLES_MAX  20U  /**< Owner tables the registry holds: one per owner with verbs (sixteen, with the Find Hub beacon's) and four for an app. */
+ #define KVERB_NAME_MAX     24U  /**< The longest verb, in characters. */
+ 
+ /** @brief The keys a spec array declares, as a kverb_t row counts them. */
+@@ -99,6 +99,7 @@ extern const kverbs_t nfc_verbs;      /**< AO_Nfc's `nfc*`. */
+ extern const kverbs_t rfid_verbs;     /**< AO_Rfid's `rfid*`. */
+ extern const kverbs_t display_verbs;  /**< AO_Display's `display_info`. */
+ extern const kverbs_t radio_verbs;    /**< AO_Radio's link, C5, identity, Wi-Fi and BLE verbs. */
++extern const kverbs_t findhub_verbs;  /**< The Find Hub beacon's `findhub_*` (kode-findhub). */
+ extern const kverbs_t net_verbs;      /**< AO_Net's network and MQTT verbs. */
+ extern const kverbs_t storage_verbs;  /**< AO_Storage's `sd_*`, `fs_*` and card table. */
+ extern const kverbs_t appmgr_verbs;   /**< AO_AppMgr's `app_*`. */
+diff --git a/components/kaos/radio/src/radio_ao.c b/components/kaos/radio/src/radio_ao.c
+index ffb0ab2..0226979 100644
+--- a/components/kaos/radio/src/radio_ao.c
++++ b/components/kaos/radio/src/radio_ao.c
+@@ -10084,6 +10084,9 @@ void kaos_radio_register(void)
+ #endif
+ #if CONFIG_KODEOS_CONSOLE
+     kaos_require(kverbs_add(&radio_verbs), "radio verbs");
++#if CONFIG_KODEOS_FINDHUB
++    kaos_require(kverbs_add(&findhub_verbs), "find hub verbs");
++#endif
+ #endif
+ }
+ 
+diff --git a/components/kdrv/CMakeLists.txt b/components/kdrv/CMakeLists.txt
+index 169ce37..00bf7a0 100644
+--- a/components/kdrv/CMakeLists.txt
++++ b/components/kdrv/CMakeLists.txt
+@@ -193,6 +193,12 @@ if(CONFIG_KODEOS_RADIO)
+         list(APPEND srcs "radio/src/kdrv_ble_find.c")
+         # The HID service: the kinds, the report map and the ring, pure C.
+         list(APPEND srcs "radio/src/kdrv_ble_hid.c")
++        # The Find Hub beacon's maths (kode-findhub): EID, flags, advert, pure C.
++        if(CONFIG_KODEOS_FINDHUB)
++            list(APPEND srcs "radio/src/kfind.c")
++            list(APPEND srcs "radio/src/kfind_crypto.c")
++            list(APPEND srcs "radio/src/uecc/uECC.c")
++        endif()
+     endif()
+ else()
+     # No link, but the C5 is still on the board: its reset line alone, so
+@@ -224,6 +230,7 @@ list(APPEND srcs ${rfal_srcs})
+ idf_component_register(
+     SRCS ${srcs}
+     PRIV_INCLUDE_DIRS
++        "radio/src/uecc"
+         "rfal/rfal/Inc"
+         "rfal/rfal/Src"
+         "rfal/chip"
+@@ -353,3 +360,10 @@ if(CONFIG_KODEOS_RADIO AND CONFIG_KODE_LOWPOWER)
+         "-Wl,--wrap=esp_hosted_tx"
+         "-u __wrap_esp_hosted_tx")
+ endif()
++
++# micro-ecc (BSD-2-Clause) for the Find Hub EID: SECP160R1 only, plain C.
++if(CONFIG_KODEOS_FINDHUB)
++    set_source_files_properties("radio/src/uecc/uECC.c" "radio/src/kfind.c"
++        PROPERTIES COMPILE_DEFINITIONS
++        "uECC_SUPPORTS_secp192r1=0;uECC_SUPPORTS_secp224r1=0;uECC_SUPPORTS_secp256r1=0;uECC_SUPPORTS_secp256k1=0;uECC_SUPPORT_COMPRESSED_POINT=0;uECC_PLATFORM=uECC_arch_other")
++endif()
+diff --git a/components/kdrv/radio/src/kdrv_ble.c b/components/kdrv/radio/src/kdrv_ble.c
+index 63e3517..68a7898 100644
+--- a/components/kdrv/radio/src/kdrv_ble.c
++++ b/components/kdrv/radio/src/kdrv_ble.c
+@@ -432,6 +432,10 @@ static uint32_t pulse_ms_left(uint32_t due, uint32_t now)
+     return ms;
+ }
+ 
++/* The Find Hub beacon borrows the one advertising set between the console's
++ * adverts; it needs the state above, so it is part of this file. */
++#include "kdrv_ble_fhn.inc"
++
+ /**
+  * @brief What kdrv_ble_pulse_next() judges, from the train as it stands.
+  * @param now       khal_time_ms().
+@@ -511,6 +515,7 @@ static int pulse_begin(const struct ble_gap_adv_params *params)
+     khal_mutex_lock(s_pulse_lock);
+     if ( !s_pulse.live )
+     {
++        fhn_yield_locked();
+         rc = ble_gap_adv_start(s_ble.own_addr_type, NULL, (int32_t)KDRV_BLE_PULSE_ON_MS,
+                                params, &ble_gap_event, NULL);
+         if ( 0 == rc )
+@@ -601,6 +606,7 @@ static void pulse_timer(struct ble_npl_event *ev)
+             if ( KDRV_BLE_PULSE_NEXT == act )
+             {
+                 /* EALREADY is an advert on the air, which is what this wants. */
++                fhn_yield_locked();
+                 refusal = ble_gap_adv_start(s_ble.own_addr_type, NULL, (int32_t)KDRV_BLE_PULSE_ON_MS,
+                                             &s_pulse.params, &ble_gap_event, NULL);
+                 if ( (0 == refusal) || (BLE_HS_EALREADY == refusal) )
+@@ -2856,6 +2862,10 @@ void kdrv_ble_battery_set(uint8_t pct)
+ {
+     app_host_t *const a = app_host();
+ 
++#if CONFIG_KODEOS_FINDHUB
++    kdrv_ble_fhn_battery(pct);
++#endif
++
+     /* Posted to the host's own queue, as the drain's wake-up is, and only
+      * for a level that moved: AO_Power publishes every reading. */
+     bool const moved = (atomic_exchange(&s_batt_pct, pct) != pct);
+@@ -2898,7 +2908,11 @@ void kdrv_ble_hid_kick(void)
+ 
+ void kdrv_ble_battery_set(uint8_t pct)
+ {
++#if CONFIG_KODEOS_FINDHUB
++    kdrv_ble_fhn_battery(pct);
++#else
+     (void)pct;
++#endif
+ }
+ 
+ bool kdrv_ble_console_attached(void)
+@@ -3667,6 +3681,7 @@ static void ble_on_reset(int reason)
+     s_ble.hearing = false;
+     kdrv_ble_hid_link_reset();
+     pulse_train_end();
++    fhn_host_reset();
+     ble_set_state(KDRV_BLE_IDLE);
+ }
+ 
+@@ -4852,6 +4867,7 @@ kode_status_t kdrv_ble_start(void)
+     (void)memset(&s_pulse_co, 0, sizeof(s_pulse_co));
+     (void)ble_npl_callout_init(&s_pulse_co, nimble_port_get_dflt_eventq(),
+                                &pulse_timer, NULL);
++    fhn_host_up();
+ 
+     nimble_port_freertos_init(&ble_host_task);
+     s_ble.up = true;
+@@ -4935,6 +4951,7 @@ kode_status_t kdrv_ble_stop(void)
+     app_quiet();
+ #endif
+ 
++    fhn_host_down();
+     /* nimble_port_stop() ends the host task's run loop; deinit then releases
+      * what it held. Order matters and there is no shortcut: deinit under a
+      * running host is the kind of teardown that takes the system with it. */
+@@ -5233,6 +5250,7 @@ kode_status_t kdrv_ble_advertise(bool on)
+                rc_n);
+         return KODE_ERROR;
+     }
++    fhn_note_console(&fields);   /* put back after each Find Hub burst */
+ 
+ #if CONFIG_KODEOS_BLE_CONSOLE
+     if ( !s_ble.rsp_set )
+@@ -5302,8 +5320,10 @@ kode_status_t kdrv_ble_advertise(bool on)
+          * what comes next. A connection ends the advert before that, and the
+          * timer with it. A train still on gives way to a continuous plan. */
+         pulse_train_end();
++        fhn_console_starting();
+         rc_n = ble_gap_adv_start(s_ble.own_addr_type, NULL, duration,
+                                  &params, &ble_gap_event, NULL);
++        fhn_note_console_start(&params, duration);
+     }
+     /* EALREADY is the answer this call wants: the advert is on the air. A
+      * state published late by the host task (a disconnect that waited on

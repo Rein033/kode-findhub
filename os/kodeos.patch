@@ -1,0 +1,32 @@
+diff --git a/components/kgui/kgui_ao.c b/components/kgui/kgui_ao.c
+index 13f0fe5..2893774 100644
+--- a/components/kgui/kgui_ao.c
++++ b/components/kgui/kgui_ao.c
+@@ -3,6 +3,10 @@
+  * @file kgui_ao.c
+  * @brief AO_Gui: LVGL, and the app launcher drawn with it.
+  */
++#include "sdkconfig.h"
++#if CONFIG_KODEOS_FINDHUB
++#include "kdrv_ble_fhn.h"
++#endif
+ #include <math.h>
+ #include <stdio.h>
+ #include <string.h>
+@@ -25469,7 +25473,16 @@ static void gui_more_value(Gui const * const me, uint8_t which, char *out,
+ #endif
+ #if CONFIG_KODEOS_BLE
+         case GUI_MORE_BLE: {
++#if CONFIG_KODEOS_FINDHUB
++            /* The Find Hub beacon rides the same radio: say whether it is on. */
++            kdrv_ble_fhn_status_t fh;
++
++            kdrv_ble_fhn_status(&fh);
++            (void)snprintf(out, cap, "%s%s", gui_radio_words(me, me->ble_on, false, false),
++                           (KFIND_MODE_OFF != fh.mode) ? ", Find Hub on" : "");
++#else
+             (void)snprintf(out, cap, "%s", gui_radio_words(me, me->ble_on, false, false));
++#endif
+             break;
+         }
+ #endif
