@@ -67,12 +67,20 @@ def main():
     ap.add_argument("--watch", action="store_true", help="the device is a Kode-watch")
     a = ap.parse_args()
 
-    d, x, h = make_key()
     STORE.mkdir(mode=0o700, parents=True, exist_ok=True)
     safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in a.name)
     keys = STORE / f"{safe}.keys"
     if keys.exists():
-        sys.exit(f"[genkey] {keys} exists: keep it (it is the only way to read old reports) or move it away")
+        # Never overwrite a key: reuse it (for a second try, or a reset device).
+        x = base64.b64decode(keys.read_text().split("Advertisement key: ")[1].split()[0])
+        print(f"[genkey] using the existing key in {keys}")
+        line = (f"findmy key {x.hex()}" if a.watch else f'findmy_set key="{x.hex()}"')
+        if a.port:
+            print(send(a.port, line, a.watch))
+        else:
+            print("  " + line)
+        return
+    d, x, h = make_key()
     keys.write_text(f"Private key: {base64.b64encode(d).decode()}\n"
                     f"Advertisement key: {base64.b64encode(x).decode()}\n"
                     f"Hashed adv key: {h}\n")
