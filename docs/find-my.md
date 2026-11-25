@@ -32,6 +32,15 @@ On the Dot the line is `findmy_set key="<56 hex>"`. On the watch it is
 
 ## 2. Read the positions
 
+> **Since 12 October 2026** Apple refuses the Android anisette that
+> macless-haystack's Docker setup uses (`-80045`, no `searchPartyToken`).
+> The way that works now is your own Mac: see
+> [tools/findmy-mac](../tools/findmy-mac/README.md). The Mac fetches the
+> encrypted reports, and a small cache server answers the macless-haystack
+> page. The steps below are the original setup and are kept for when Apple
+> lets it work again.
+
+
 **macless-haystack** (Linux, Windows or Mac; Apple ID with two-factor
 authentication):
 
