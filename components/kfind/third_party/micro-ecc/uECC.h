@@ -3,6 +3,8 @@
 #ifndef _UECC_H_
 #define _UECC_H_
 
+#include "kfind_prefix.h"   /* kode-findhub: kfind_uECC_* names */
+
 #include <stdint.h>
 
 /* Platform selection options.
