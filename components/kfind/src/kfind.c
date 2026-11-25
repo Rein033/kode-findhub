@@ -216,6 +216,31 @@ uint32_t kfind_slot(uint32_t t, uint32_t jitter_s)
     return slot;
 }
 
+size_t kfind_haystack_adv(uint8_t out[KFIND_HAYSTACK_ADV_LEN], const uint8_t key[KFIND_HAYSTACK_KEY_LEN])
+{
+    if ( (NULL == out) || (NULL == key) )
+    {
+        return 0U;
+    }
+    out[0] = 0x1EU;   /* length 30 */
+    out[1] = 0xFFU;   /* manufacturer specific data */
+    out[2] = 0x4CU;   /* Apple, little-endian */
+    out[3] = 0x00U;
+    out[4] = 0x12U;   /* offline finding */
+    out[5] = 0x19U;   /* its length, 25 */
+    out[6] = 0x00U;   /* status */
+    (void)memcpy(&out[7], &key[6], 22U);
+    out[29] = (uint8_t)(key[0] >> 6);
+    out[30] = 0x00U;  /* hint */
+    return KFIND_HAYSTACK_ADV_LEN;
+}
+
+void kfind_haystack_addr(const uint8_t key[KFIND_HAYSTACK_KEY_LEN], uint8_t addr[KFIND_ADDR_LEN])
+{
+    (void)memcpy(addr, key, KFIND_ADDR_LEN);
+    addr[0] = (uint8_t)(addr[0] | 0xC0U);   /* static random */
+}
+
 static int hex_val(char c)
 {
     if ( (c >= '0') && (c <= '9') )

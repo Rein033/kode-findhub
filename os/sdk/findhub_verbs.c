@@ -8,6 +8,8 @@
  *   findhub_set key="<40 hex>" [utp=on|off]                      one fixed EID
  *   findhub_off                                                  forget, stop
  *   findhub_info                                                 what is on the air
+ *   findmy_set key="<56 hex>"     Apple Find My, OpenHaystack advertisement key
+ *   findmy_off                    stop the Apple advert
  *
  * The key is a secret: `findhub_set` answers only on the USB cable, never on
  * BLE or MQTT, and `findhub_info` never prints it.
@@ -33,6 +35,10 @@ static const karg_spec_t A_FINDHUB_SET[] = {
     { .key = "pair_date", .required = false, .type = KARG_UINT, .min = 1U, .max = FHV_DATE_MAX },
     { .key = "key",       .required = false, .type = KARG_STRING },
     { .key = "utp",       .required = false, .type = KARG_BOOL, .def = "on" },
+};
+
+static const karg_spec_t A_FINDMY_SET[] = {
+    { .key = "key", .required = true, .type = KARG_STRING },
 };
 
 static const char *const FHV_MODE[] = { "off", "static", "rotating" };
@@ -136,6 +142,46 @@ static void h_findhub_info(const kverb_t *c, const karg_val_t *v)
                   (unsigned long)st.next_s, eid, addr,
                   console_word(FHV_BATT, Q_DIM(FHV_BATT), st.batt),
                   (unsigned long)st.sent, (unsigned long)st.skipped);
+    (void)snprintf(addr, sizeof(addr), "%02x:%02x:%02x:%02x:%02x:%02x", st.hay_addr[0],
+                   st.hay_addr[1], st.hay_addr[2], st.hay_addr[3], st.hay_addr[4], st.hay_addr[5]);
+    console_reply(">|findmy on=%s addr=%s sent=%lu skipped=%lu", console_on_off(st.hay_on),
+                  st.hay_on ? addr : "-", (unsigned long)st.hay_sent, (unsigned long)st.hay_skipped);
+    console_reply(">ok");
+}
+
+/** @brief findmy_set: send Apple's offline-finding advert for an OpenHaystack key. */
+static void h_findmy_set(const kverb_t *c, const karg_val_t *v)
+{
+    uint8_t key[KFIND_HAYSTACK_KEY_LEN];
+
+    (void)c;
+    if ( !console_src_allows(CONSOLE_NEED_CABLE) )
+    {
+        return;
+    }
+    if ( !kfind_hex(v[0].s, key, sizeof(key)) )
+    {
+        console_reply_err(KCLI_ERR_VALUE, "key");
+        return;
+    }
+    if ( KODE_OK != kdrv_ble_fhn_haystack(key) )
+    {
+        console_reply_err(KCLI_ERR_REJECT, "store");
+        return;
+    }
+    console_reply(">ok");
+}
+
+/** @brief findmy_off: stop the Apple advert and forget its key. */
+static void h_findmy_off(const kverb_t *c, const karg_val_t *v)
+{
+    (void)c;
+    (void)v;
+    if ( KODE_OK != kdrv_ble_fhn_haystack(NULL) )
+    {
+        console_reply_err(KCLI_ERR_REJECT, "store");
+        return;
+    }
     console_reply(">ok");
 }
 
@@ -143,6 +189,8 @@ static const kverb_t FINDHUB_VERBS[] = {
     { "findhub_set",  A_FINDHUB_SET, KVERB_KEYS(A_FINDHUB_SET), h_findhub_set  },
     { "findhub_off",  NULL,          0U,                        h_findhub_off  },
     { "findhub_info", NULL,          0U,                        h_findhub_info },
+    { "findmy_set",   A_FINDMY_SET,  KVERB_KEYS(A_FINDMY_SET),  h_findmy_set   },
+    { "findmy_off",   NULL,          0U,                        h_findmy_off   },
 };
 
 const kverbs_t findhub_verbs = {

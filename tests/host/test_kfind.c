@@ -98,6 +98,21 @@ static void test_misc(void)
     CHECK(0x80U == kfind_hashed_flags(NULL, KFIND_BATT_NONE, true));
 }
 
+static void test_haystack(void)
+{
+    for ( size_t i = 0U; i < sizeof(s_hvec) / sizeof(s_hvec[0]); ++i )
+    {
+        uint8_t adv[KFIND_HAYSTACK_ADV_LEN];
+        uint8_t addr[KFIND_ADDR_LEN];
+
+        CHECK(KFIND_HAYSTACK_ADV_LEN == kfind_haystack_adv(adv, s_hvec[i].key));
+        CHECK(0 == memcmp(adv, s_hvec[i].adv, sizeof(adv)));
+        kfind_haystack_addr(s_hvec[i].key, addr);
+        CHECK(0 == memcmp(addr, s_hvec[i].addr, sizeof(addr)));
+        CHECK(0xC0U == (addr[0] & 0xC0U));
+    }
+}
+
 int main(void)
 {
     test_aes();
@@ -105,6 +120,7 @@ int main(void)
     test_vectors();
     test_clock();
     test_misc();
+    test_haystack();
     printf("%d passed, %d failed\n", s_pass, s_fail);
     return (0 == s_fail) ? 0 : 1;
 }

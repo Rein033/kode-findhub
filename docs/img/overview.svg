@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" width="960" height="420" font-family="Outfit, DM Sans, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#191919"/>
+    </marker>
+  </defs>
+  <rect width="960" height="420" rx="18" fill="#DED7CD"/>
+  <text x="30" y="44" font-size="24" font-weight="700" fill="#191919">How the Dot is found</text>
+  <text x="30" y="68" font-size="14" fill="#191919" opacity="0.7">One small radio, two crowd networks, end-to-end encrypted</text>
+
+  <!-- device -->
+  <rect x="30" y="110" width="200" height="230" rx="16" fill="#191919"/>
+  <rect x="62" y="132" width="136" height="110" rx="10" fill="#028AC2"/>
+  <text x="130" y="184" font-size="18" font-weight="700" fill="#fff" text-anchor="middle">Kode Dot</text>
+  <text x="130" y="206" font-size="13" fill="#fff" text-anchor="middle">or Kode-watch</text>
+  <rect x="62" y="258" width="136" height="30" rx="15" fill="#FFAC00"/>
+  <text x="130" y="278" font-size="13" font-weight="700" fill="#191919" text-anchor="middle">every ~1.8 s</text>
+  <text x="130" y="312" font-size="12" fill="#DED7CD" text-anchor="middle">Google burst 0xFEAA</text>
+  <text x="130" y="328" font-size="12" fill="#DED7CD" text-anchor="middle">Apple burst 0x004C</text>
+
+  <!-- phones -->
+  <rect x="320" y="104" width="190" height="96" rx="14" fill="#fff"/>
+  <text x="415" y="140" font-size="17" font-weight="700" fill="#191919" text-anchor="middle">Android phones</text>
+  <text x="415" y="162" font-size="13" fill="#191919" text-anchor="middle">hear the EID, encrypt</text>
+  <text x="415" y="180" font-size="13" fill="#191919" text-anchor="middle">their GPS position to it</text>
+  <rect x="320" y="250" width="190" height="96" rx="14" fill="#fff"/>
+  <text x="415" y="286" font-size="17" font-weight="700" fill="#191919" text-anchor="middle">iPhones</text>
+  <text x="415" y="308" font-size="13" fill="#191919" text-anchor="middle">hear the public key,</text>
+  <text x="415" y="326" font-size="13" fill="#191919" text-anchor="middle">encrypt their position to it</text>
+
+  <!-- clouds -->
+  <rect x="600" y="104" width="160" height="96" rx="48" fill="#028AC2"/>
+  <text x="680" y="146" font-size="16" font-weight="700" fill="#fff" text-anchor="middle">Google</text>
+  <text x="680" y="166" font-size="13" fill="#fff" text-anchor="middle">Find Hub</text>
+  <rect x="600" y="250" width="160" height="96" rx="48" fill="#191919"/>
+  <text x="680" y="292" font-size="16" font-weight="700" fill="#fff" text-anchor="middle">Apple</text>
+  <text x="680" y="312" font-size="13" fill="#fff" text-anchor="middle">Find My</text>
+
+  <!-- you -->
+  <rect x="808" y="150" width="128" height="150" rx="14" fill="#FFAC00"/>
+  <text x="872" y="190" font-size="17" font-weight="700" fill="#191919" text-anchor="middle">You</text>
+  <text x="872" y="216" font-size="12" fill="#191919" text-anchor="middle">kodefind locate</text>
+  <text x="872" y="236" font-size="12" fill="#191919" text-anchor="middle">macless-haystack</text>
+  <text x="872" y="266" font-size="12" fill="#191919" text-anchor="middle">decrypt with</text>
+  <text x="872" y="282" font-size="12" fill="#191919" text-anchor="middle">your own key</text>
+
+  <!-- arrows -->
+  <g stroke="#191919" stroke-width="2.5" fill="none" marker-end="url(#a)">
+    <path d="M232,190 C270,170 290,155 316,152"/>
+    <path d="M232,260 C270,280 290,295 316,298"/>
+    <path d="M512,152 L596,152"/>
+    <path d="M512,298 L596,298"/>
+    <path d="M806,225 L764,160" marker-end="none" marker-start="url(#a)"/>
+    <path d="M806,225 L764,290" marker-end="none" marker-start="url(#a)"/>
+  </g>
+  <text x="274" y="134" font-size="12" fill="#191919" opacity="0.75">BLE</text>
+  <text x="274" y="330" font-size="12" fill="#191919" opacity="0.75">BLE</text>
+  <text x="554" y="142" font-size="12" fill="#191919" opacity="0.75" text-anchor="middle">report</text>
+  <text x="554" y="288" font-size="12" fill="#191919" opacity="0.75" text-anchor="middle">report</text>
+  <text x="30" y="384" font-size="12" fill="#191919" opacity="0.7">Neither network can read the position: only the owner's key decrypts it.</text>
+  <text x="30" y="402" font-size="12" fill="#191919" opacity="0.7">The Google identifier changes every 1024 s; the Apple key is fixed (OpenHaystack).</text>
+</svg>

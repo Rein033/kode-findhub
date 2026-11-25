@@ -134,6 +134,31 @@ uint32_t kfind_beacon_time(int64_t unix_s, uint32_t pair_date);
  */
 uint32_t kfind_slot(uint32_t t, uint32_t jitter_s);
 
+/* ---- Apple Find My, the OpenHaystack way ------------------------------------ */
+
+#define KFIND_HAYSTACK_KEY_LEN  28U   /**< P-224 public key, x coordinate ("advertisement key"). */
+#define KFIND_HAYSTACK_ADV_LEN  31U   /**< The offline-finding advert: a whole legacy packet. */
+
+/**
+ * @brief Pack Apple's offline-finding advert for an OpenHaystack key.
+ *
+ * Manufacturer data 0x004C, type 0x12 length 0x19: status 0x00, key bytes
+ * 6..27, the two top bits of key byte 0, hint 0x00. The first 6 key bytes
+ * travel in the address (kfind_haystack_addr()).
+ *
+ * @param out At least KFIND_HAYSTACK_ADV_LEN bytes.
+ * @param key The 28-byte advertisement key.
+ * @return KFIND_HAYSTACK_ADV_LEN, or 0 on NULL.
+ */
+size_t kfind_haystack_adv(uint8_t out[KFIND_HAYSTACK_ADV_LEN], const uint8_t key[KFIND_HAYSTACK_KEY_LEN]);
+
+/**
+ * @brief The static random address that carries key bytes 0..5.
+ * @param key  The advertisement key.
+ * @param addr Out, most significant byte first: key[0] | 0xC0, key[1..5].
+ */
+void kfind_haystack_addr(const uint8_t key[KFIND_HAYSTACK_KEY_LEN], uint8_t addr[KFIND_ADDR_LEN]);
+
 /**
  * @brief Read @p n bytes of hex (upper or lower case, no separators).
  * @return true when @p s is exactly 2n hex digits.

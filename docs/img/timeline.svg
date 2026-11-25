@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" width="960" height="300" font-family="Outfit, DM Sans, Helvetica, Arial, sans-serif">
+  <rect width="960" height="300" rx="18" fill="#DED7CD"/>
+  <text x="30" y="44" font-size="24" font-weight="700" fill="#191919">One advertising set, shared</text>
+  <text x="30" y="68" font-size="14" fill="#191919" opacity="0.7">kodeOS has one legacy advertising set; the beacons borrow it for 30 ms each, then give it back</text>
+
+  <!-- axis: 0..4 s over x 110..930 => 205 px / s -->
+  <line x1="110" y1="236" x2="930" y2="236" stroke="#191919" stroke-width="1.5"/>
+  <g font-size="12" fill="#191919" text-anchor="middle">
+    <text x="110" y="256">0 s</text><text x="315" y="256">1 s</text><text x="520" y="256">2 s</text><text x="725" y="256">3 s</text><text x="930" y="256">4 s</text>
+  </g>
+  <g stroke="#191919" stroke-width="1" opacity="0.25">
+    <line x1="315" y1="96" x2="315" y2="236"/><line x1="520" y1="96" x2="520" y2="236"/><line x1="725" y1="96" x2="725" y2="236"/>
+  </g>
+
+  <text x="30" y="120" font-size="14" font-weight="700" fill="#191919">Console</text>
+  <text x="30" y="170" font-size="14" font-weight="700" fill="#028AC2">Google</text>
+  <text x="30" y="220" font-size="14" font-weight="700" fill="#191919">Apple</text>
+
+  <!-- console pulses: 100 ms every ~1022 ms (resting advert) -->
+  <g fill="#191919" opacity="0.55">
+    <rect x="110" y="104" width="21" height="22" rx="4"/>
+    <rect x="320" y="104" width="21" height="22" rx="4"/>
+    <rect x="530" y="104" width="21" height="22" rx="4"/>
+    <rect x="740" y="104" width="21" height="22" rx="4"/>
+  </g>
+  <!-- google bursts: 30 ms at ~0.4, 2.2, 3.95 s -->
+  <g fill="#028AC2">
+    <rect x="190" y="154" width="8" height="22" rx="2"/>
+    <rect x="560" y="154" width="8" height="22" rx="2"/>
+    <rect x="906" y="154" width="8" height="22" rx="2"/>
+  </g>
+  <!-- apple bursts follow google -->
+  <g fill="#FFAC00" stroke="#191919" stroke-width="1">
+    <rect x="198" y="204" width="8" height="22" rx="2"/>
+    <rect x="568" y="204" width="8" height="22" rx="2"/>
+    <rect x="914" y="204" width="8" height="22" rx="2"/>
+  </g>
+  <g font-size="12" fill="#191919">
+    <text x="214" y="168">30 ms, NRPA from the EID</text>
+    <text x="214" y="218">30 ms right after, address = key bytes 0-5</text>
+    <text x="586" y="168">1.70-1.95 s later</text>
+  </g>
+  <text x="30" y="284" font-size="12" fill="#191919" opacity="0.7">A burst goes into the pause between console pulses. A continuous console advert is paused and restarted with the time it had left.</text>
+</svg>

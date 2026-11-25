@@ -28,6 +28,7 @@
 #define FHN_NVS_NS        "kfind"
 #define FHN_NVS_CFG       "cfg"
 #define FHN_NVS_CLOCK     "t"
+#define FHN_NVS_HAY       "hay"     /**< Apple Find My advertisement key, 28 bytes. */
 #define FHN_CFG_VER       1U
 #define FHN_CFG_BYTES     (1U + 1U + 1U + KFIND_EIK_LEN + 4U + KFIND_EID_LEN)
 #define FHN_CKPT_S        (6U * 3600U)   /**< Wall clock to NVS every 6 h.   */
@@ -44,7 +45,6 @@ static struct {
     uint32_t               jitter;
     uint8_t                eid[KFIND_EID_LEN];
     uint8_t                addr[KFIND_ADDR_LEN];  /**< MSB first.              */
-    bool                   addr_set;    /**< The controller has addr.           */
     uint8_t                adv[KFIND_ADV_MAX];
     uint8_t                adv_len;
     uint8_t                batt;
@@ -68,6 +68,17 @@ static struct {
     /* Counters. */
     uint32_t               sent;
     uint32_t               skipped;
+    /* Apple Find My (OpenHaystack): one fixed advertisement key. */
+    bool                   hay_on;
+    uint8_t                hay_key[KFIND_HAYSTACK_KEY_LEN];
+    uint8_t                hay_adv[KFIND_HAYSTACK_ADV_LEN];
+    uint8_t                hay_addr[KFIND_ADDR_LEN];
+    uint32_t               hay_sent;
+    uint32_t               hay_skipped;
+    bool                   then_apple;  /**< Apple's burst follows the one on the air. */
+    /* The random address the controller holds now (MSB first). */
+    bool                   rnd_valid;
+    uint8_t                rnd[KFIND_ADDR_LEN];
     struct ble_npl_callout co;
 } s_fhn;
 
@@ -129,6 +140,15 @@ static void fhn_load_locked(void)
             s_fhn.cfg.mode = KFIND_MODE_OFF;
         }
     }
+    len = sizeof(blob);
+    if ( (KODE_OK == khal_nvs_get_blob(FHN_NVS_NS, FHN_NVS_HAY, blob, &len))
+         && (KFIND_HAYSTACK_KEY_LEN == len) )
+    {
+        (void)memcpy(s_fhn.hay_key, blob, KFIND_HAYSTACK_KEY_LEN);
+        (void)kfind_haystack_adv(s_fhn.hay_adv, s_fhn.hay_key);
+        kfind_haystack_addr(s_fhn.hay_key, s_fhn.hay_addr);
+        s_fhn.hay_on = true;
+    }
     if ( KODE_OK == khal_nvs_get_u64(FHN_NVS_NS, FHN_NVS_CLOCK, &t) )
     {
         s_fhn.ckpt_unix = t;
@@ -178,6 +198,42 @@ kode_status_t kdrv_ble_fhn_configure(const kdrv_ble_fhn_cfg_t *cfg)
     }
     KLOG_N(TAG, "find hub: beacon %s", (KFIND_MODE_OFF == cfg->mode) ? "off"
            : ((KFIND_MODE_STATIC == cfg->mode) ? "on (static key)" : "on (rotating)"));
+    return KODE_OK;
+}
+
+kode_status_t kdrv_ble_fhn_haystack(const uint8_t key[KFIND_HAYSTACK_KEY_LEN])
+{
+    kode_status_t rc;
+
+    if ( NULL == key )
+    {
+        rc = khal_nvs_erase(FHN_NVS_NS, FHN_NVS_HAY);
+    }
+    else
+    {
+        rc = khal_nvs_set_blob(FHN_NVS_NS, FHN_NVS_HAY, key, KFIND_HAYSTACK_KEY_LEN);
+    }
+    if ( KODE_OK != rc )
+    {
+        return KODE_ERROR;
+    }
+    if ( NULL != s_pulse_lock )
+    {
+        khal_mutex_lock(s_pulse_lock);
+    }
+    fhn_load_locked();
+    s_fhn.hay_on = (NULL != key);
+    if ( NULL != key )
+    {
+        (void)memcpy(s_fhn.hay_key, key, KFIND_HAYSTACK_KEY_LEN);
+        (void)kfind_haystack_adv(s_fhn.hay_adv, s_fhn.hay_key);
+        kfind_haystack_addr(s_fhn.hay_key, s_fhn.hay_addr);
+    }
+    if ( NULL != s_pulse_lock )
+    {
+        khal_mutex_unlock(s_pulse_lock);
+    }
+    KLOG_N(TAG, "find my (OpenHaystack): beacon %s", (NULL != key) ? "on" : "off");
     return KODE_OK;
 }
 
@@ -257,7 +313,6 @@ static bool fhn_refresh_locked(void)
             hashed = 0U;
             s_fhn.adv_len = (uint8_t)kfind_adv(s_fhn.adv, s_fhn.eid, s_fhn.cfg.utp, flags, hashed);
             kfind_nrpa(s_fhn.eid, s_fhn.addr);
-            s_fhn.addr_set = false;
             s_fhn.have = true;
         }
         return true;
@@ -290,7 +345,6 @@ static bool fhn_refresh_locked(void)
     }
     s_fhn.slot = slot;
     kfind_nrpa(s_fhn.eid, s_fhn.addr);
-    s_fhn.addr_set = false;
     s_fhn.have = true;
     return true;
 }
@@ -398,6 +452,95 @@ static bool fhn_give_back_locked(void)
     return idle;
 }
 
+/** @brief Which beacon a burst carries. */
+#define FHN_KIND_GOOGLE  1U
+#define FHN_KIND_APPLE   2U
+
+/**
+ * @brief Put one burst on the air: its address, its data, 30 ms. Lock held.
+ * @return true when NimBLE took it.
+ */
+static bool fhn_burst_locked(uint8_t kind)
+{
+    const uint8_t *addr = s_fhn.addr;
+    const uint8_t *data = s_fhn.adv;
+    int            len  = (int)s_fhn.adv_len;
+    uint8_t        own  = BLE_OWN_ADDR_RANDOM;
+
+    if ( FHN_KIND_APPLE == kind )
+    {
+        addr = s_fhn.hay_addr;
+        data = s_fhn.hay_adv;
+        len  = (int)KFIND_HAYSTACK_ADV_LEN;
+    }
+    if ( BLE_OWN_ADDR_PUBLIC != s_ble.own_addr_type )
+    {
+        /* The board's identity is itself a random address: changing it would
+         * change the console's. Google's burst goes out under the identity;
+         * Apple's cannot (its address carries key bytes) and is skipped. */
+        if ( FHN_KIND_APPLE == kind )
+        {
+            return false;
+        }
+        own = s_ble.own_addr_type;
+    }
+    else if ( (!s_fhn.rnd_valid) || (0 != memcmp(s_fhn.rnd, addr, KFIND_ADDR_LEN)) )
+    {
+        uint8_t le[KFIND_ADDR_LEN];
+
+        if ( 0 != ble_gap_disc_active() )
+        {
+            /* The controller refuses a new random address while scanning.
+             * Google's burst may go out under the last one; Apple's may not. */
+            if ( (FHN_KIND_APPLE == kind) || (!s_fhn.rnd_valid) )
+            {
+                return false;
+            }
+        }
+        else
+        {
+            for ( uint8_t i = 0U; KFIND_ADDR_LEN > i; ++i )
+            {
+                le[i] = addr[(KFIND_ADDR_LEN - 1U) - i];
+            }
+            if ( 0 != ble_hs_id_set_rnd(le) )
+            {
+                return false;
+            }
+            (void)memcpy(s_fhn.rnd, addr, KFIND_ADDR_LEN);
+            s_fhn.rnd_valid = true;
+        }
+    }
+    else
+    {
+        /* this address is set already */
+    }
+
+    struct ble_gap_adv_params p;
+
+    (void)memset(&p, 0, sizeof(p));
+    p.conn_mode = BLE_GAP_CONN_MODE_NON;
+    p.disc_mode = BLE_GAP_DISC_MODE_NON;
+    p.itvl_min  = (uint16_t)KDRV_BLE_FHN_ITVL;
+    p.itvl_max  = (uint16_t)KDRV_BLE_FHN_ITVL;
+    if ( (0 != ble_gap_adv_set_data(data, len))
+         || (0 != ble_gap_adv_start(own, NULL, (int32_t)KDRV_BLE_FHN_BURST_MS, &p,
+                                    &fhn_gap_event, NULL)) )
+    {
+        return false;
+    }
+    s_fhn.on_air = true;
+    if ( FHN_KIND_APPLE == kind )
+    {
+        ++s_fhn.hay_sent;
+    }
+    else
+    {
+        ++s_fhn.sent;
+    }
+    return true;
+}
+
 static int fhn_gap_event(struct ble_gap_event *event, void *arg)
 {
     bool idle = false;
@@ -409,6 +552,17 @@ static int fhn_gap_event(struct ble_gap_event *event, void *arg)
         if ( s_fhn.on_air )
         {
             s_fhn.on_air = false;
+            if ( s_fhn.then_apple )
+            {
+                /* Google's burst is done: Apple's follows before the set goes back. */
+                s_fhn.then_apple = false;
+                if ( fhn_burst_locked(FHN_KIND_APPLE) )
+                {
+                    khal_mutex_unlock(s_pulse_lock);
+                    return 0;
+                }
+                ++s_fhn.hay_skipped;
+            }
             idle = fhn_give_back_locked();
         }
         khal_mutex_unlock(s_pulse_lock);
@@ -421,7 +575,7 @@ static int fhn_gap_event(struct ble_gap_event *event, void *arg)
     return 0;
 }
 
-/** @brief One period: send a burst if the air allows. Host task. */
+/** @brief One period: send the bursts the air allows. Host task. */
 static void fhn_timer(struct ble_npl_event *ev)
 {
     uint32_t next = fhn_period();
@@ -431,7 +585,7 @@ static void fhn_timer(struct ble_npl_event *ev)
     (void)ev;
     khal_mutex_lock(s_pulse_lock);
     fhn_load_locked();
-    if ( (KFIND_MODE_OFF == s_fhn.cfg.mode) || (!s_ble.synced) )
+    if ( ((KFIND_MODE_OFF == s_fhn.cfg.mode) && (!s_fhn.hay_on)) || (!s_ble.synced) )
     {
         khal_mutex_unlock(s_pulse_lock);
         fhn_arm(next);   /* keeps looking: a config may come */
@@ -447,17 +601,28 @@ static void fhn_timer(struct ble_npl_event *ev)
     {
         uint32_t const now = khal_time_ms();
 
+        /* Two bursts may follow each other: leave room for both. */
         if ( s_pulse.on_air
-             || (pulse_ms_left(s_pulse.due, now) < (KDRV_BLE_FHN_BURST_MS + 20U)) )
+             || (pulse_ms_left(s_pulse.due, now) < ((2U * KDRV_BLE_FHN_BURST_MS) + 30U)) )
         {
             khal_mutex_unlock(s_pulse_lock);
             fhn_arm(FHN_RETRY_MS);
             return;
         }
     }
-    if ( !fhn_refresh_locked() )
+
+    bool google = false;
+
+    if ( KFIND_MODE_OFF != s_fhn.cfg.mode )
     {
-        ++s_fhn.skipped;
+        google = fhn_refresh_locked();
+        if ( !google )
+        {
+            ++s_fhn.skipped;
+        }
+    }
+    if ( (!google) && (!s_fhn.hay_on) )
+    {
         khal_mutex_unlock(s_pulse_lock);
         fhn_arm(next);
         return;
@@ -478,49 +643,29 @@ static void fhn_timer(struct ble_npl_event *ev)
         s_fhn.paused = true;
     }
 
-    uint8_t own = BLE_OWN_ADDR_RANDOM;
-
-    if ( BLE_OWN_ADDR_PUBLIC != s_ble.own_addr_type )
+    s_fhn.then_apple = false;
+    if ( google )
     {
-        /* The board's identity is itself a random address: changing it would
-         * change the console's. The burst goes out under the identity. */
-        own = s_ble.own_addr_type;
-    }
-    else if ( (!s_fhn.addr_set) && (0 == ble_gap_disc_active()) )
-    {
-        uint8_t le[KFIND_ADDR_LEN];
-
-        for ( uint8_t i = 0U; KFIND_ADDR_LEN > i; ++i )
+        sent = fhn_burst_locked(FHN_KIND_GOOGLE);
+        if ( sent )
         {
-            le[i] = s_fhn.addr[(KFIND_ADDR_LEN - 1U) - i];
+            s_fhn.then_apple = s_fhn.hay_on;
         }
-        /* The controller refuses a new random address while scanning; then
-         * the last one stays until a scan-free period. */
-        s_fhn.addr_set = (0 == ble_hs_id_set_rnd(le));
+        else
+        {
+            ++s_fhn.skipped;
+        }
     }
-    else
+    if ( (!sent) && s_fhn.hay_on )
     {
-        /* already set, or a scan runs */
+        sent = fhn_burst_locked(FHN_KIND_APPLE);
+        if ( !sent )
+        {
+            ++s_fhn.hay_skipped;
+        }
     }
-
-    struct ble_gap_adv_params p;
-
-    (void)memset(&p, 0, sizeof(p));
-    p.conn_mode = BLE_GAP_CONN_MODE_NON;
-    p.disc_mode = BLE_GAP_DISC_MODE_NON;
-    p.itvl_min  = (uint16_t)KDRV_BLE_FHN_ITVL;
-    p.itvl_max  = (uint16_t)KDRV_BLE_FHN_ITVL;
-    if ( (0 == ble_gap_adv_set_data(s_fhn.adv, (int)s_fhn.adv_len))
-         && (0 == ble_gap_adv_start(own, NULL, (int32_t)KDRV_BLE_FHN_BURST_MS, &p,
-                                    &fhn_gap_event, NULL)) )
+    if ( !sent )
     {
-        s_fhn.on_air = true;
-        ++s_fhn.sent;
-        sent = true;
-    }
-    else
-    {
-        ++s_fhn.skipped;
         idle = fhn_give_back_locked();
     }
     khal_mutex_unlock(s_pulse_lock);
@@ -541,7 +686,7 @@ static void fhn_host_up(void)
     s_fhn.on_air        = false;
     s_fhn.paused        = false;
     s_fhn.cons_starting = false;
-    s_fhn.addr_set      = false;
+    s_fhn.rnd_valid     = false;
     (void)memset(&s_fhn.co, 0, sizeof(s_fhn.co));
     (void)ble_npl_callout_init(&s_fhn.co, nimble_port_get_dflt_eventq(), &fhn_timer, NULL);
     s_fhn.inited = true;
@@ -553,7 +698,6 @@ static void fhn_host_reset(void)
 {
     s_fhn.on_air   = false;
     s_fhn.paused   = false;
-    s_fhn.addr_set = false;
 }
 
 /** @brief The host is going (kdrv_ble_stop()): the callout goes with its pool. */
@@ -597,6 +741,10 @@ void kdrv_ble_fhn_status(kdrv_ble_fhn_status_t *out)
     out->sent    = s_fhn.sent;
     out->skipped = s_fhn.skipped;
     out->host_up = s_ble.synced;
+    out->hay_on  = s_fhn.hay_on;
+    (void)memcpy(out->hay_addr, s_fhn.hay_addr, KFIND_ADDR_LEN);
+    out->hay_sent    = s_fhn.hay_sent;
+    out->hay_skipped = s_fhn.hay_skipped;
     if ( NULL != s_pulse_lock )
     {
         khal_mutex_unlock(s_pulse_lock);

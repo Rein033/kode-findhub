@@ -37,6 +37,9 @@ een nRF54L15 nodig. Het ontwerp staat in [channel-sounding.md](channel-sounding.
 
 ## iPhone / Apple Find My
 
-Niet in deze versie. Apple Find My is een ander netwerk en werkt alleen
-officieel via Apple's MFi-programma. De onofficiële weg (zoals OpenHaystack)
-kan als tweede baken-modus naast Google worden toegevoegd.
+Ook ingebouwd, via OpenHaystack: `python3 tools/haystack/genkey.py --port ...`
+(met `--watch` voor het horloge) maakt een sleutelpaar en zet de publieke
+sleutel op het apparaat. iPhones melden dan versleuteld de plek bij Apple.
+Je leest die met macless-haystack (Docker + Apple ID) of OpenHaystack (Mac).
+**Niet in de Find My-app zelf**: "Ander item toevoegen" werkt alleen voor
+MFi-gecertificeerde accessoires. Uitleg: [find-my.md](find-my.md).

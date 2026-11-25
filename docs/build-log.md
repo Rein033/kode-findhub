@@ -1,5 +1,15 @@
 # Build log
 
+## 2026-11-25 (later): + Apple Find My (OpenHaystack)
+
+* The same sources, plus the Apple burst and `findmy_set` / `findmy_off`.
+* `idf.py build`: **passed**. `kodeos.bin` is 3 988 624 bytes (0x3cdc90), with
+  5 % of the app partition free.
+* Host tests: 71 passed, 0 failed.
+* The Kode-watch builds (0.40.0, 0.41.0) were tested on hardware with
+  throwaway keys. Google and Apple bursts both went out (`sent` 29/29 in
+  about 55 s), the EID matched the reference, and the watch stayed stable.
+
 ## 2026-11-25: kodeOS 0.1.5 + kode-findhub
 
 * Sources: KodeOS `7ebfdd8` (0.1.5), sdk `d775f3d` (v0.1.5), then `os/apply.sh`.

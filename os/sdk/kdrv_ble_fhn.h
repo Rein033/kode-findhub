@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later */
 /**
  * @file kdrv_ble_fhn.h
- * @brief The Find Hub Network beacon: the Kode Dot on Google's crowd network.
+ * @brief The Find Hub Network beacon: the Kode Dot on Google's crowd network,
+ *        and (optionally) on Apple's Find My network the OpenHaystack way.
  *
  * Once configured, the board sends a Find Hub advert at least once every two
  * seconds while the BLE host is up, between the console's own adverts: the
@@ -62,6 +63,10 @@ typedef struct {
     uint32_t     sent;         /**< Bursts on the air since boot.          */
     uint32_t     skipped;      /**< Periods with no burst (radio busy, host down). */
     bool         host_up;      /**< The BLE host is synced.                */
+    bool         hay_on;       /**< Apple Find My (OpenHaystack) key set.  */
+    uint8_t      hay_addr[KFIND_ADDR_LEN]; /**< Its address (key bytes 0..5). */
+    uint32_t     hay_sent;     /**< Apple bursts on the air since boot.    */
+    uint32_t     hay_skipped;  /**< Apple bursts that could not go out.    */
 } kdrv_ble_fhn_status_t;
 
 /**
@@ -74,6 +79,17 @@ kode_status_t kdrv_ble_fhn_configure(const kdrv_ble_fhn_cfg_t *cfg);
 
 /** @brief Read what the beacon is doing. @param out Filled. */
 void kdrv_ble_fhn_status(kdrv_ble_fhn_status_t *out);
+
+/**
+ * @brief Set or clear the Apple Find My (OpenHaystack) key, kept in NVS.
+ *
+ * Its advert follows Google's in the same period (or goes alone), from the
+ * static random address that carries the key's first 6 bytes.
+ *
+ * @param key The 28-byte advertisement key; NULL stops it.
+ * @return KODE_OK, or KODE_ERROR when NVS refused.
+ */
+kode_status_t kdrv_ble_fhn_haystack(const uint8_t key[KFIND_HAYSTACK_KEY_LEN]);
 
 /** @brief The battery, in percent, as AO_Power reads it: hashed flags bits 5-6. */
 void kdrv_ble_fhn_battery(uint8_t pct);

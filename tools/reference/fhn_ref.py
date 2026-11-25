@@ -56,6 +56,15 @@ def nrpa(e: bytes) -> bytes:
     return bytes(a)
 
 
+def haystack_adv(key: bytes) -> bytes:
+    """OpenHaystack Firmware/ESP32 openhaystack_main.c, as its set_payload_from_key."""
+    return bytes([0x1E, 0xFF, 0x4C, 0x00, 0x12, 0x19, 0x00]) + key[6:28] + bytes([key[0] >> 6, 0x00])
+
+
+def haystack_addr(key: bytes) -> bytes:
+    return bytes([key[0] | 0xC0]) + key[1:6]
+
+
 def c_bytes(b: bytes) -> str:
     return "{" + ", ".join(f"0x{x:02x}" for x in b) + "}"
 
@@ -81,6 +90,12 @@ def vectors():
         print(f"    {c_bytes(e)}, 0x{h:02x},")
         print(f"    {c_bytes(adv(e, utp, h))},")
         print(f"    {c_bytes(nrpa(e))} }},")
+    print("};")
+    print("typedef struct { uint8_t key[28]; uint8_t adv[31]; uint8_t addr[6]; } hvec_t;")
+    print("static const hvec_t s_hvec[] = {")
+    for seed in (b"haystack 1", b"haystack 2", b"\xff" * 4):
+        key = hashlib.sha256(seed).digest()[:28]
+        print(f"  {{ {c_bytes(key)}, {c_bytes(haystack_adv(key))}, {c_bytes(haystack_addr(key))} }},")
     print("};")
 
 

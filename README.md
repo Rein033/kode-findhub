@@ -1,6 +1,9 @@
 # kode-findhub
 
-**Put your Kode Dot on Google's Find Hub network**, built into kodeOS.
+**Put your Kode Dot on Google's Find Hub network and Apple's Find My
+network**, built into kodeOS. It runs on the Kode-watch too.
+
+![How the Dot is found: the Dot sends Google and Apple adverts, phones nearby report an encrypted position, you decrypt it](docs/img/overview.svg)
 
 The Kode Dot is small and easy to lose. With this patch, kodeOS sends a
 **Find Hub Network** (FHN) beacon between its own Bluetooth adverts. Any
@@ -17,6 +20,9 @@ including Google. You see the position with the `kodefind` tool.
 * **Status:** the beacon maths are tested against Google's algorithm. The
   kodeOS build passes, and a built image is in [dist/](dist/). **Not yet tested on a real Dot or with real Android
   phones.** See [Status](#status).
+* **Apple Find My:** the OpenHaystack way, next to Google. Locations come
+  through macless-haystack or OpenHaystack, not the Find My app. See
+  [docs/find-my.md](docs/find-my.md).
 * **Channel Sounding (Bluetooth 6.0):** design only. It needs an RF module
   with a CS-capable chip. See [docs/channel-sounding.md](docs/channel-sounding.md).
 
@@ -72,6 +78,10 @@ including Google. You see the position with the `kodefind` tool.
   and restarted with the time it had left. A pulsed one (kodeOS's resting
   advert) is not touched: the burst goes into the pause. The spec asks for
   at least one advert every 2 s. The beacon sends one every 1.70-1.95 s.
+
+![The console's advert, Google's burst and Apple's burst share one advertising set](docs/img/timeline.svg)
+
+![Byte layout of the Google Find Hub advert and the Apple offline-finding advert](docs/img/adverts.svg)
 
 The whole algorithm is in [components/kfind](components/kfind) (pure C,
 host-tested). The scheduler is in
@@ -163,6 +173,8 @@ On the USB console (`kcli`, or any serial terminal at 115200):
 | `findhub_set eik="<64 hex>" pair_date=<unix s> [utp=on\|off]` | Rotating mode (what `kodefind register` writes). Cable only. |
 | `findhub_set key="<40 hex>" [utp=on\|off]` | Static mode: one fixed EID. Cable only. |
 | `findhub_off` | Forget the key and stop the beacon. |
+| `findmy_set key="<56 hex>"` | Apple Find My: the OpenHaystack advertisement key (`tools/haystack/genkey.py`). Cable only. |
+| `findmy_off` | Stop the Apple advert. |
 | `findhub_info` | `>|findhub mode=rotating utp=on host=up clock=wall beacon_t=… slot=… next_s=… eid=… addr=… batt=normal sent=… skipped=…` |
 
 `utp=on` (the default) sends frame type `0x41`, "unwanted tracking
@@ -228,6 +240,8 @@ recognise your Dot.
 | On a real Dot (radio timing, console coexistence) | **not tested** |
 | Rotating EIDs accepted by Google's servers | **not tested.** The upload uses the same request as GoogleFindMyTools, with real rotating EIDs. |
 | `kodefind` against Google | **not tested** (needs your account) |
+| Apple advert (OpenHaystack) | byte layout tested against OpenHaystack's ESP32 firmware. Runs on the Kode-watch (0.41.0) next to Google's, with a throwaway key. Not yet located through Apple. |
+| Kode-watch (0.40.0 / 0.41.0) | on hardware: the EID matches the reference byte for byte, both bursts go out, the watch stays stable |
 | Channel Sounding | design only |
 
 ## Repository layout
@@ -239,6 +253,7 @@ os/kode-sdk.patch      SDK changes: kdrv_ble hooks, Kconfig, CMake, verbs
 os/kodeos.patch        kodeOS change: Find Hub in More → Bluetooth
 os/sdk/                new SDK files: kdrv_ble_fhn.{h,inc}, findhub_verbs.c
 tools/kodefind/        register / provision / locate (on GoogleFindMyTools)
+tools/haystack/        genkey.py: an OpenHaystack key pair for Apple Find My
 tools/reference/       Python reference of the maths, makes the test vectors
 tests/host/            `make -C tests/host`
 tests/tools/           offline test of kodefind against GoogleFindMyTools' crypto
@@ -248,5 +263,7 @@ dist/                  kodeOS 0.1.5 + Find Hub, built (flash at 0x20000)
 
 ## Licence
 
-GPL-3.0-or-later, like kodeOS and GoogleFindMyTools. micro-ecc
+GPL-3.0-or-later, like kodeOS and GoogleFindMyTools. The Apple advert's
+layout is reimplemented from OpenHaystack's documentation and firmware
+(AGPL-3.0); no OpenHaystack code is copied. micro-ecc
 (`components/kfind/third_party/micro-ecc`) is BSD-2-Clause.
